@@ -22,6 +22,11 @@ This service is designed as a monolithic application that combines a REST API, a
 
 ---
 
+<img width="960" height="504" alt="Screenshot (144)" src="https://github.com/user-attachments/assets/ce8eb4bd-2ca4-4b70-a98c-af81d21edecc" />
+<img width="960" height="504" alt="Screenshot (143)" src="https://github.com/user-attachments/assets/b07949cc-1c3d-4287-8f05-4fbbc27648c3" />
+
+
+
 ## How to Run
 
 ### Using Docker Compose (Recommended)
