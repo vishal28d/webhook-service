@@ -28,6 +28,20 @@ mongoose.connect(MONGO_URI)
 app.post('/api/subscriptions', async (req, res) => {
   try {
     const { url, secret, eventTypes } = req.body;
+
+    if (!url || typeof url !== 'string') {
+      return res.status(400).json({ error: 'Missing or invalid "url" field' });
+    }
+    if (!eventTypes || !Array.isArray(eventTypes) || eventTypes.length === 0) {
+      return res.status(400).json({ error: 'Missing or invalid "eventTypes" — must be a non-empty array' });
+    }
+
+    // Check for duplicate subscription (same URL and same event types)
+    const existing = await Subscription.findOne({ url, eventTypes: { $all: eventTypes, $size: eventTypes.length } });
+    if (existing) {
+      return res.status(409).json({ error: 'A subscription with this URL and event types already exists', existing });
+    }
+
     const sub = new Subscription({ url, secret, eventTypes });
     await sub.save();
     res.status(201).json(sub);
@@ -60,6 +74,13 @@ const matchesFilter = (eventType: string, filter: string) => {
 app.post('/api/events', async (req, res) => {
   try {
     const { type, payload } = req.body;
+
+    if (!type || typeof type !== 'string') {
+      return res.status(400).json({ error: 'Missing or invalid "type" field' });
+    }
+    if (payload === undefined || payload === null) {
+      return res.status(400).json({ error: 'Missing "payload" field' });
+    }
     
     // Save event
     const event = new WebhookEvent({ type, payload });
@@ -117,8 +138,8 @@ app.post('/api/deliveries/:id/retry', async (req, res) => {
     if (!delivery) return res.status(404).json({ error: 'Delivery not found' });
 
     delivery.status = 'pending';
-    delivery.nextAttemptAt = new Date();
-    // we don't reset attempts, just schedule immediately
+    delivery.attempts = 0;           // Reset attempts so the full retry budget is available
+    delivery.nextAttemptAt = new Date(); // Schedule for immediate pickup by the worker
     await delivery.save();
     
     res.json({ message: 'Delivery queued for retry', delivery });

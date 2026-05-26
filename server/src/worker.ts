@@ -74,10 +74,15 @@ async function attemptDelivery(delivery: any) {
       
     } catch (httpErr: any) {
       // Failure
-      delivery.lastResponseCode = httpErr.response?.status || 0;
+      const statusCode = httpErr.response?.status || 0;
+      delivery.lastResponseCode = statusCode;
       delivery.lastResponseBody = httpErr.message;
+
+      // 4xx errors are client errors — permanent failures, not worth retrying.
+      // Only retry on 5xx (server errors), timeouts (status 0), and network failures.
+      const isRetryable = statusCode === 0 || statusCode >= 500;
       
-      if (delivery.attempts >= MAX_ATTEMPTS) {
+      if (!isRetryable || delivery.attempts >= MAX_ATTEMPTS) {
         delivery.status = 'failed';
       } else {
         // Calculate next backoff with jitter

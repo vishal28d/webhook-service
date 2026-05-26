@@ -10,10 +10,14 @@
 **Alternatives considered:** BullMQ with Redis, RabbitMQ.
 **Reasoning:** To avoid introducing a message broker like Redis as a requirement (keeping the infra footprint low per constraints), a simple in-process loop querying MongoDB for "due" deliveries works perfectly for a single-process deployment. It ensures events survive restarts because everything is persisted to MongoDB immediately, and the polling loop picks up pending items on startup.
 
+### Crash Recovery & Delivery Guarantees
+**Decision:** At-least-once delivery semantics.
+**Reasoning:** All deliveries are persisted to MongoDB in a `pending` state *before* any HTTP dispatch is attempted. If the process crashes mid-delivery, the in-flight delivery remains `pending` in the database. On restart, the worker's polling loop picks it up again. This means a subscriber may receive the same webhook twice if the crash happens after the HTTP POST succeeds but before the status update is saved. Deduplication is the subscriber's responsibility — a common pattern in webhook systems (Stripe, GitHub). True exactly-once would require a transactional outbox or two-phase commit, which is out of scope for a 4-6 hour take-home.
+
 ### Retry Policy
-**Decision:** Exponential backoff with jitter
+**Decision:** Exponential backoff with jitter, distinguishing 4xx from 5xx.
 **Alternatives considered:** Fixed intervals (e.g. retry every 5 mins).
-**Reasoning:** Exponential backoff is the standard for webhooks to prevent overwhelming a struggling subscriber endpoint. Adding random jitter prevents the "thundering herd" problem if a service comes back online. The cap is set at 5 attempts to prevent endless retries.
+**Reasoning:** Exponential backoff is the standard for webhooks to prevent overwhelming a struggling subscriber endpoint. Adding random jitter prevents the "thundering herd" problem if a service comes back online. The cap is set at 5 attempts to prevent endless retries. 4xx responses (client errors like 400, 404) are treated as permanent failures and are *not* retried — only 5xx (server errors) and network timeouts trigger the retry cycle.
 
 ### Payload Signing
 **Decision:** HMAC SHA-256
